@@ -9,8 +9,10 @@ public class EnemyWeapon : MonoBehaviour
 
     void OnCollistionEnter(Collision coll)
     {
+        Debug.Log("Hit1?");
         if (coll.gameObject.tag == "Player")
         {
+            Debug.Log("Hit2?");
             StartCoroutine(this.ResetColl());
         }
     }

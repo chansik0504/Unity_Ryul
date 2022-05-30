@@ -1,8 +1,13 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-[RequireComponent(typeof(AudioSource))]
 
+// 포톤 추가
+// 플레이어의 Canvas의 UI 항목을 사용하기 위함
+using UnityEngine.UI;
+
+// 이 컴포넌트는 AudioSource 컴포넌트가 필요함
+[RequireComponent(typeof(AudioSource))]
 
 public class BaseControl : MonoBehaviour
 {
@@ -64,6 +69,23 @@ public class BaseControl : MonoBehaviour
     //레이저 도트 타겟을 위한 변수
     public Transform rayDot;
 
+    // 포톤 추가/////////////////////////////
+    //PhotonView 컴포넌트를 할당할 레퍼런스 
+    public PhotonView pv = null;
+
+    //위치 정보를 송수신할 때 사용할 변수 선언 및 초기값 설정 
+    Quaternion currRot = Quaternion.identity;
+
+    //플레이어의 Id를 저장하는 변수
+    public int playerId = -1;
+    //몬스터의 파괴 스코어를 저장하는 변수 
+    public int killCount = 0;
+    //로컬  플레이어 연결 레퍼런스
+    public PlayerCtrl localPlayer;
+
+    // 로비체크용 변수
+    public bool loby;
+    //////////////////////////////////////////////////////////
 
     void Awake()
     {
@@ -103,6 +125,49 @@ public class BaseControl : MonoBehaviour
         source = GetComponent<AudioSource>();
         //처음에 MuzzleFlash 를 비활성화  
         muzzleFlash.SetActive(false);
+
+        // 포톤 추가/////////////////////////////////////////
+
+        /*
+         * (참고) 우린 수업시간에 Head에 컴포넌트 작업을 하였다. 따라서
+         * PhotonView 를 이 오브젝트에 추가 하였다. 물론 최상위 Base 오브젝트에
+         * 추가하고 이 스크립트를 연결 하여도 상관없지만 RPC 호출을 위하여 
+         * 같은 차원상에 PhotonView 가 필요하기 때문에 Head 에 추가한거다.
+         * 문제는 네트워크 유저가 나갈때 PhotonView 컴포넌트가 들어가있는
+         * 게임오브젝트가 Destroy 되는데 Head에 PhotonView 가 들어가 있으므로
+         * 단지, Head 만 사라지고 Base 게임오브젝트는 남는다. 이 문제를 해결하기
+         * 위하여 우린 Base 게임오브젝트에 단순히 PhotonView 만 추가하면 된다.
+         * 하지만 가장 최선은 수업을 진행하다보니 이렇게 된거지 Base 게임오브젝트
+         * 부터 스크립트 작업을 시작하는거다...샘이 항상 말했듯이 
+         * 빈 게임오브젝트 => 하위로 모델링 차일드 => 부모 게임오브젝트 부터 스크립트 작업
+         * 이 순선의 중요성이다. 그냥 뭘하던 빈 게임오브젝트 부터!!!
+         */
+
+        //PhotonView 컴포넌트 할당 
+        pv = GetComponent<PhotonView>();
+        //PhotonView Observed Components 속성에 BaseCtrl(현재) 스크립트 Component를 연결
+        pv.ObservedComponents[0] = this;
+        //데이타 전송 타입을 설정
+        pv.synchronization = ViewSynchronization.UnreliableOnChange;
+
+        //PhotonView의 ownerId를 playerId에 저장
+        //유저 ownerId 부여(숫자 1부터~)
+        playerId = pv.ownerId;
+
+        // 원격 플래이어의 회전 값을 처리할 변수의 초기값 설정 
+        currRot = myTr.rotation;
+
+        // 로컬 플레이어 연결
+        localPlayer = transform.root.GetComponent<PlayerCtrl>();
+        // 플레이어와 분리
+        transform.parent.parent.parent = null;
+
+        // 끊긴 베이스 연결
+        if (pv.isMine)
+        {
+            GameObject.FindWithTag("Mgr").GetComponent<StageManager>().baseStart = this;
+        }
+        ////////////////////////////////////////////
     }
 
 
@@ -110,11 +175,15 @@ public class BaseControl : MonoBehaviour
     public void StartBase()
     {
 
-        // 일정 간격으로 주변의 가장 가까운 Enemy를 찾는 코루틴 
-        StartCoroutine(this.TargtSetting());
+        // 포톤 추가///////////////
+        if (pv.isMine)
+        {
+            // 일정 간격으로 주변의 가장 가까운 Enemy를 찾는 코루틴 
+            StartCoroutine(this.TargtSetting());
 
-        // 가장 가까운 적을 찾아 발사...
-        StartCoroutine(this.ShotSetting());
+            // 가장 가까운 적을 찾아 발사...
+            StartCoroutine(this.ShotSetting());
+        }
 
     }
 
@@ -143,7 +212,8 @@ public class BaseControl : MonoBehaviour
             //타겟에 레이저 Dot 생성 
             rayDot.localPosition = posValue;
 
-            if (shot && hitInfo.collider.tag == "Enemy")
+            // 포톤 추가
+            if (pv.isMine && shot && hitInfo.collider.tag == "Enemy")
             {
                 //발사를 위한 변수 true
                 check = true;
@@ -161,44 +231,67 @@ public class BaseControl : MonoBehaviour
 
         }
 
-
-
-        if (!shot)
+        // 포톤 추가
+        if (pv.isMine || loby)
         {
-
-            myTr.RotateAround(targetTr.position, Vector3.up, Time.deltaTime * 55.0f);
-            //transform.RotateAroundLocal(Vector3.up, Time.deltaTime * 55.0f);
-
-            //발사를 위한 변수 false
-            check = false;
-        }
-        else
-        {
-            //적을 봐라봄  
-            if (shot)
+            if (!shot)
             {
-                if (Time.time > enemyLookTime)
-                {
 
-                    //	enemyLookRotation = Quaternion.LookRotation(-(EnemyTarget.forward)); // - 해줘야 바라봄  
-                    enemyLookRotation = Quaternion.LookRotation(EnemyTarget.position - myTr.position); // - 해줘야 바라봄  
-                    myTr.rotation = Quaternion.Lerp(myTr.rotation, enemyLookRotation, Time.deltaTime * 2.0f);
-                    enemyLookTime = Time.time + 0.01f;
+                myTr.RotateAround(targetTr.position, Vector3.up, Time.deltaTime * 55.0f);
+                //transform.RotateAroundLocal(Vector3.up, Time.deltaTime * 55.0f);
+
+                //발사를 위한 변수 false
+                check = false;
+            }
+            else
+            {
+                //적을 봐라봄  
+                if (shot)
+                {
+                    if (Time.time > enemyLookTime)
+                    {
+
+                        //	enemyLookRotation = Quaternion.LookRotation(-(EnemyTarget.forward)); // - 해줘야 바라봄  
+                        enemyLookRotation = Quaternion.LookRotation(EnemyTarget.position - myTr.position); // - 해줘야 바라봄  
+                        myTr.rotation = Quaternion.Lerp(myTr.rotation, enemyLookRotation, Time.deltaTime * 2.0f);
+                        enemyLookTime = Time.time + 0.01f;
+                    }
+                }
+            }
+
+
+
+
+            //만약 발사가 true 이면....
+            if (shot && check)
+            {
+                if (Time.time > bulletSpeed)
+                {
+                    // 포톤 추가//////////////////////////////
+
+                    //일정 주기로 발사
+                    //(포톤 추가)자신의 플레이어일 경우는 로컬함수를 호출하여 총을 발포
+                    //일정 주기로 발사
+                    ShotStart();
+
+                    //(포톤 추가)원격 네트워크 플레이어의 자신의 아바타 플레이어에는 RPC로 원격으로 FireStart 함수를 호출 
+                    pv.RPC("ShotStart", PhotonTargets.Others, null);
+
+                    //(포톤 추가)모든 네트웍 유저에게 RPC 데이타를 전송하여 RPC 함수를 호출, 로컬 플레이어는 로컬 Fire 함수를 바로 호출 
+                    //pv.RPC("ShotStart", PhotonTargets.All, null);
+
+                    ///////////////////////////////////////////////
+
+                    bulletSpeed = Time.time + 0.3f;
                 }
             }
         }
-
-
-
-        //만약 발사가 true 이면....
-        if (shot && check)
+        // 포톤 추가
+        //원격 플레이어일 때 수행
+        else
         {
-            if (Time.time > bulletSpeed)
-            {
-                //일정 주기로 발사
-                ShotStart();
-                bulletSpeed = Time.time + 0.3f;
-            }
+            //원격 베이스의 아바타를 수신받은 각도만큼 부드럽게 회전시키자
+            myTr.rotation = Quaternion.Slerp(myTr.rotation, currRot, Time.deltaTime * 3.0f);
         }
 
 
@@ -254,8 +347,7 @@ public class BaseControl : MonoBehaviour
         {
             yield return new WaitForSeconds(0.2f);
 
-            // 여기선 불 필요
-            // dist1 = (EnemyTarget.position - myTr.position).sqrMagnitude;
+            dist1 = (EnemyTarget.position - myTr.position).sqrMagnitude;
             dist2 = Vector3.Distance(myTr.position, EnemyTarget.position);
 
 
@@ -275,7 +367,10 @@ public class BaseControl : MonoBehaviour
 
     }
 
-
+    // 포톤 추가
+    //포톤 클라우드를 위한 어트리뷰트로 함수 선언 
+    [PunRPC]
+    ////////////////////////////////////////////////////////
     //터렛 발사
     private void ShotStart()
     {
@@ -286,9 +381,15 @@ public class BaseControl : MonoBehaviour
     // 총탄 발사 코루틴 함수
     IEnumerator FireStart()
     {
+        // 포톤 추가///////////////////////////////
+
         //Debug.Log("Fire");
         //Bullet 프리팹을 동적 생성
-        Instantiate(bullet, firePos.position, firePos.rotation);
+        BulletControl obj = Instantiate(bullet, firePos.position, firePos.rotation).GetComponent<BulletControl>();
+        // 동적 생성한 총알에 유저 ownerId 부여(숫자 1부터~)
+        obj.playerId = pv.ownerId;
+
+        ////////////////////////////////////////////
 
         //총탄 사운드 발생 
         source.PlayOneShot(fireSfx, fireSfx.length + 0.2f);
@@ -320,7 +421,57 @@ public class BaseControl : MonoBehaviour
     [ContextMenu("FireStart")]
     void Fire()
     {
-        StartBase();
+        shot = true;
     }
+
+    // 포톤 추가/////////////////////////////////////////////////
+
+    //네트워크 플레이어의 스코어 증가 및 HUD 설정 함수
+    public void PlusKillCount()
+    {
+        //Enemy 파괴 스코어 증가
+        ++killCount;
+        //HUD Text UI 항목에 스코어 표시
+        localPlayer.txtKillCount.text = killCount.ToString();
+
+        /* 포톤 클라우드에서 제공하는 플레이어의 점수 관련 메서드
+         * 
+         * PhotonPlayer.AddScore ( int score )      점수를 누적
+         * PhotonPlayer.SetScore( int totScore )    해당 점수로 셋팅
+         * PhotonPlayer.GetScore()                  현재 점수를 조회
+         * 
+         */
+
+        //스코어를 증가시킨 베이스가 자신인 경우에만 저장
+        if (pv.isMine)
+        {
+            /* PhotonNetwork.player는 로컬 플레이어 즉 자신을 의미한다.
+               즉 다음 로직은 자기 자신의 스코어에 1점을 증가시킨다. 이 정보는 동일 룸에
+               입장해있는 다른 네트워크 플레이어와 실시간으로 공유된다.*/
+            PhotonNetwork.player.AddScore(1);
+        }
+    }
+
+    /*
+     * PhotonView 컴포넌트의 Observe 속성이 스크립트 컴포넌트로 지정되면 PhotonView
+     * 컴포넌트는 데이터를 송수신할 때, 해당 스크립트의 OnPhotonSerializeView 콜백 함수를 호출한다. 
+     */
+    void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
+    {
+        //로컬 플레이어의 위치 정보를 송신
+        if (stream.isWriting)
+        {
+            //박싱
+            stream.SendNext(myTr.rotation);
+        }
+        //원격 플레이어의 위치 정보를 수신
+        else
+        {
+            //언박싱
+            currRot = (Quaternion)stream.ReceiveNext();
+        }
+
+    }
+    ////////////////////////////////////////////////////////////////
 
 }

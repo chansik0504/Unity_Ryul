@@ -74,6 +74,11 @@ public class DestructionRay : MonoBehaviour
                     Destroy(hitInfo.collider.gameObject);
                 }
 
+                //드럼통에 Hit 되면 MovePlayerCtrlRay에 BarrelFire 함수호출
+                else if(hitInfo.collider.tag == "Barrel")
+                {
+                    GameObject.Find("Player").GetComponent<PlayerCtrl>().BarrelFire(hitInfo.collider.gameObject.transform);
+                }
             }
         }
 #endif
@@ -97,6 +102,11 @@ public class DestructionRay : MonoBehaviour
 
                     //오브젝트 제거
                     Destroy(hitInfo.collider.gameObject);
+                }
+
+                else if(hitInfo.collider.tag == "Barrel")
+                {
+                    GameObject.Find("Player").GetComponent<PlayerCtrl>().BarrelFire(hitInfo.collider.gameObject.transform);
                 }
 
             }
@@ -124,6 +134,11 @@ public class DestructionRay : MonoBehaviour
                     Instantiate(fireEffect, hitInfo.point, Quaternion.identity );
                     //오브젝트 제거
                     Destroy(hitInfo.collider.gameObject);
+                }
+                
+                else if(hitInfo.collider.tag == "Barrel")
+                {
+                    GameObject.Find("Player").GetComponent<PlayerCtrl>().BarrelFire(hitInfo.collider.gameObject.transform);
                 }
 
             }

@@ -14,6 +14,12 @@ public class BulletControl : MonoBehaviour
 
     private float dist;
 
+    public int playerId = -1;
+
+    public int killCount = 0;
+
+    public PlayerCtrl localPlayer;
+
     // Use this for initialization
     void Start()
     {

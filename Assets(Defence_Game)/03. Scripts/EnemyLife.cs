@@ -19,49 +19,90 @@ public class EnemyLife : MonoBehaviour
     //생명력 바 연결 레퍼런스 (특정 컴포넌트 아니면 Renderer 로 연결가능)
     public MeshRenderer lifeBar;
 
+    //포톤 추가
+    //PhotonView 컴포넌트를 할당할 레퍼런스 
+    public PhotonView pv = null;
+
 
 
     void Awake()
     {
         //레퍼런스 할당
         myTr = GetComponent<Transform>();
+
+        //포톤 추가
+        //PhotonView 컴포넌트 할당 (다른방식 연결)
+        pv = PhotonView.Get(this);
     }
 
 
+    //포톤 추가
     //포탑에 의해서 Enemy가 총알과 맞았을 때 호출되는 콜백 함수
     void OnCollisionEnter(Collision coll)
     {
-        Debug.Log(coll.gameObject);
         if (coll.gameObject.tag == "Bullet")
         {
-            Debug.Log("무야호");
             //총알이 맞은 위치를 위한 ContactPoint 구조체 선언 및 할당
             ContactPoint contact = coll.contacts[0];
 
             //혈흔 효과 함수를 호출
             CreateBlood(contact.point);
 
-            //맞은 총알의 파워를 가져와 Enemy의 life를 감소
-            life -= coll.gameObject.GetComponent<BulletControl>().power;
-            //로컬적인 개념으로 머트리얼 셋팅
-            lifeBar.material.SetFloat("_Progress", life/100.0f);
+            // 포톤 추가
+            // 각 요소를 변수로 저장
+            int pow = coll.gameObject.GetComponent<BulletControl>().power;
+            int id = coll.gameObject.GetComponent<BulletControl>().playerId;
+
+            //(포톤 추가)모든 네트웍 유저의 몬스터에 RPC 데이타를 전송하며 RPC 함수를 호출, 로컬 플레이어는 로컬 Deamage 함수를 바로 호출 
+            pv.RPC("Deamage", PhotonTargets.AllBuffered, pow, id);
+
+            ////맞은 총알의 파워를 가져와 Enemy의 life를 감소
+            //life -= coll.gameObject.GetComponent<BulletCtrl>().power;
+            ////로컬적인 개념으로 머트리얼 셋팅
+            //lifeBar.material.SetFloat("_Progress", life/100.0f);
 
 
-            // 생명력이 바닥이면 죽이자
-            if (life <= 0)
-            {
-                enemy.EnemyDie();
-            }
+            //// 생명력이 바닥이면 죽이자
+            //if (life <= 0)
+            //{
+            //    // 포톤 추가
+            //    //자신을 파괴시킨 적 네트워크 베이스의 스코어를 증가시키는 함수를 호출함
+            //    StartCoroutine(this.SaveKillCount(coll.gameObject.GetComponent<BulletCtrl>().playerId));
+            //    enemy.EnemyDie();
+            //}
 
             //몬스터 타격 루틴을 위한 호출
             enemy.HitEnemy();
         }
     }
 
+    //포톤 추가////////////////////////////////////////
+    //포톤 클라우드를 위한 어트리뷰트로 함수 선언 
+    [PunRPC]
+    ////////////////////////////////////////////////////////
+    //데미지 함수
+    void Deamage(int dam, int id)
+    {
+        //맞은 총알의 파워를 가져와 Enemy의 life를 감소
+        life -= dam;
+        //로컬적인 개념으로 머트리얼 셋팅
+        lifeBar.material.SetFloat("_Progress", life / 100.0f);
+
+
+        // 생명력이 바닥이면 죽이자
+        if (life <= 0)
+        {
+            // 포톤 추가
+            //자신을 파괴시킨 적 네트워크 베이스의 스코어를 증가시키는 함수를 호출함
+            StartCoroutine(this.SaveKillCount(id));
+            enemy.EnemyDie();
+        }
+    }
+
     //Enemy가 Ray에 맞았을 때 호출되는 콜백 함수
     void OnCollision(object[] _params)
     {
-        Debug.Log(string.Format("info {0} : {1}", _params[0], _params[1]));
+        //Debug.Log(string.Format("info {0} : {1}", _params[0], _params[1]));
 
         //혈흔 효과 함수를 호출
         CreateBlood((Vector3)_params[0]);
@@ -125,6 +166,36 @@ public class EnemyLife : MonoBehaviour
         enemyblood2.localScale = Vector3.one * scale;
 
         yield return null;
+    }
+
+    // 포톤 추가
+    //자신을 파괴시킨 네트워크 베이스를 검색해서 스코어를 증가시켜주는 함수
+    IEnumerator SaveKillCount(int firePlayerId)
+    {
+
+        //Base 태그로 지정된 모든 네트워크 베이스를 가져와 배열에 저장
+        GameObject[] bases = GameObject.FindGameObjectsWithTag("Base");
+
+        // 전체 네트워크 베이스를 검색하여 총알의 주인을 찿아줌...
+        foreach (GameObject _base in bases)
+        {
+
+            var baseControl = _base.GetComponent<BaseControl>();
+
+            //네트워크베이스의 playerId가 총알의 playerId와 동일한지 판단
+            if (baseControl != null && baseControl.playerId == firePlayerId)
+            {
+
+                //동일한 베이스일 경우 스코어를 증가시켜줌
+                baseControl.PlusKillCount();
+                break;
+
+            }
+
+        }
+
+        yield return null;
+
     }
 
 }

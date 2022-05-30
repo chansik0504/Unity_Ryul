@@ -98,6 +98,7 @@ public class SoldierControler : MonoBehaviour
 
     public void StartBase()
     {
+        Debug.Log("StartBase");
 
         // 일정 간격으로 주변의 가장 가까운 Enemy를 찾는 코루틴 
         StartCoroutine(this.TargtSetting());
@@ -296,6 +297,7 @@ public class SoldierControler : MonoBehaviour
         {
             if (Time.time > bulletSpeed)
             {
+                Debug.Log("ShotStart");
                 //일정 주기로 발사
                 ShotStart();
                 bulletSpeed = Time.time + 0.3f;
@@ -335,6 +337,7 @@ public class SoldierControler : MonoBehaviour
     // 가장 가까운 적을 찾아 발사...
     IEnumerator ShotSetting()
     {
+        Debug.Log("발싸");
 
         while (!isDie)
         {
