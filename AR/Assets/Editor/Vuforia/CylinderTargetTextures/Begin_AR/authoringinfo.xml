@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VuforiaUnityInfo version="7.0">
+    <TargetSet version="5.0" toolVersion="2.8.0">
+        <CylinderTarget name="POCARI" version="3.0" targetId="2ba3fbbc6ddd4a11bfa3231fbf3e5bc2" sideLength="180.000000" topDiameter="90.000000" bottomDiameter="90.000000" sideImage="POCARI.Body_scaled.jpg"/>
+    </TargetSet>
+</VuforiaUnityInfo>
